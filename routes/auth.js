@@ -19,7 +19,8 @@ const router = express.Router();
  */
 router.get('/user', authMiddleware, async (req, res) => {
   try {
-    const user = await userService.getUserByEmail(req.userId);
+    // if user id is uuid then get user by id, otherwise get user by email (for backward compatibility)
+    const user = await userService.getUserById(req.userId) || await userService.getUserByEmail(req.userId);
     if (!user) {
       return res.status(404).json({
         success: false,
