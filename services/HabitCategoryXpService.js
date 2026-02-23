@@ -40,82 +40,78 @@ class HabitCategoryXpService {
     return "Bronze";
   }
 
-  async getXpByCategory(userId, startDate = null, endDate = null) {
-    try {
-      const params = [userId];
-      let dateFilter = '';
+async getXpByCategory(userId, startDate = null, endDate = null) {
+  try {
+    const params = [userId];
+    let dateFilter = "";
 
-      if (startDate && endDate) {
-        dateFilter = `AND c.date BETWEEN $2 AND $3`;
-        params.push(startDate, endDate);
-      }
+    if (startDate && endDate) {
+      dateFilter = `AND c.date BETWEEN $2 AND $3`;
+      params.push(startDate, endDate);
+    }
 
-      const query = `
-        SELECT 
-          hc.habits_category_id,
-          hc.name,
-          COALESCE(SUM(h.xp_value), 0) AS total_xp,
-          COUNT(c.id) AS completion_count
-        FROM habit_categories hc
-        LEFT JOIN habits h 
-          ON h.category_id = hc.habits_category_id
-          AND h.user_id = $1
-        LEFT JOIN completions c 
-          ON c.habit_id = h.id
-          AND c.user_id = $1
-          ${dateFilter}
-        GROUP BY hc.habits_category_id, hc.name
-        ORDER BY total_xp DESC
-      `;
+    const query = `
+      SELECT 
+        hc.habits_category_id,
+        hc.name,
+        SUM(h.xp_value) AS total_xp,
+        COUNT(c.id) AS completion_count
+      FROM completions c
+      JOIN habits h 
+        ON c.habit_id = h.id
+      JOIN habit_categories hc 
+        ON h.category_id = hc.habits_category_id
+      WHERE c.user_id = $1
+      ${dateFilter}
+      GROUP BY hc.habits_category_id, hc.name
+      ORDER BY total_xp DESC
+    `;
 
-      const result = await pool.query(query, params);
+    const result = await pool.query(query, params);
 
-      let strongestCategory = null;
-      let highestXp = 0;
+    let strongestCategory = null;
+    let highestXp = 0;
 
-      const categories = result.rows.map((row) => {
-        const totalXp = parseInt(row.total_xp);
+    const categories = result.rows.map((row) => {
+      const totalXp = parseInt(row.total_xp);
 
-        const level = this.calculateLevel(totalXp);
+      const level = this.calculateLevel(totalXp);
+      const xpBeforeLevel = this.totalXpToReachLevel(level);
+      const xpForNextLevel = this.xpForLevel(level);
+      const xpIntoLevel = totalXp - xpBeforeLevel;
 
-        const xpBeforeLevel = this.totalXpToReachLevel(level);
-        const xpForNextLevel = this.xpForLevel(level);
-
-        const xpIntoLevel = totalXp - xpBeforeLevel;
-
-        const progressPercentage = xpForNextLevel > 0
+      const progressPercentage =
+        xpForNextLevel > 0
           ? Math.floor((xpIntoLevel / xpForNextLevel) * 100)
           : 0;
 
-        if (totalXp > highestXp) {
-          highestXp = totalXp;
-          strongestCategory = row.name;
-        }
-
-        return {
-          categoryId: row.habits_category_id,
-          name: row.name,
-          totalXp,
-          completionCount: parseInt(row.completion_count),
-
-          level,
-          rank: this.getRank(level),
-
-          xpIntoLevel,
-          xpForNextLevel,
-          progressPercentage: Math.min(progressPercentage, 100)
-        };
-      });
+      if (totalXp > highestXp) {
+        highestXp = totalXp;
+        strongestCategory = row.name;
+      }
 
       return {
-        strongestCategory,
-        categories
+        categoryId: row.habits_category_id,
+        name: row.name,
+        totalXp,
+        completionCount: parseInt(row.completion_count),
+        level,
+        rank: this.getRank(level),
+        xpIntoLevel,
+        xpForNextLevel,
+        progressPercentage: Math.min(progressPercentage, 100),
       };
+    });
 
-    } catch (error) {
-      throw new Error(`Error fetching XP by category: ${error.message}`);
-    }
+    return {
+      strongestCategory,
+      categories,
+    };
+
+  } catch (error) {
+    throw new Error(`Error fetching XP by category: ${error.message}`);
   }
+}
 
   async getTotalXp(userId, startDate = null, endDate = null) {
     try {
