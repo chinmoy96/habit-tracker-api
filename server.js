@@ -22,7 +22,7 @@ app.use(express.json());
 
 // CORS Configuration
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: 'https://habit-tracker-ui-mu.vercel.app',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));
